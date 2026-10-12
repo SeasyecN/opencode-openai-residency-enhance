@@ -1,11 +1,11 @@
-# @seasyecn/opencode-openai-residency-local
+# @seasyecn/opencode-openai-residency-enhance
 
 OpenCode plugin for OpenAI Codex API compatibility tweaks:
 
 1. **Data Residency** — Attaches `x-openai-internal-codex-residency` for OpenAI Enterprise workspaces with regional data restrictions.
 2. **User-Agent / Client Gate Override** — Overrides `User-Agent` and `originator` headers on outgoing requests to satisfy backend client gates (e.g. `codex_cli_rs` client gate for models such as GPT-5.5 / GPT-5.6).
 3. **WebSocket Transport for WS-Only Models (Experimental)** — Opt-in transport for WebSocket-only Codex models (such as `gpt-5.6-sol`) over Codex WebSocket transport (`wss://`), injecting the required service tier and translating frames to SSE streams.
-4. **Local Configuration & Gateway Support** — Supports external configuration via `opencode-openai-residency-local.json` or environment variable, custom User-Agent strings, custom target URL fragments (for proxies/gateways), and selective request-body model matching.
+4. **Enhanced Configuration & Gateway Support** — Supports external configuration via `opencode-openai-residency-local.json` or environment variable, custom User-Agent strings, custom target URL fragments (for proxies/gateways), and selective request-body model matching.
 
 ---
 
@@ -15,8 +15,9 @@ This package is derived from the upstream project:
 - **Upstream Package**: [`opencode-openai-residency`](https://github.com/DusKing1/opencode-openai-residency)
 - **Original Author**: Hugo Chiang ([@DusKing1](https://github.com/DusKing1))
 - **Original License**: MIT License (Copyright © 2026 Hugo Chiang)
+- **Enhanced Fork Repository**: [SeasyecN/opencode-openai-residency-enhance](https://github.com/SeasyecN/opencode-openai-residency-enhance)
 
-### Enhancements in `@seasyecn/opencode-openai-residency-local`:
+### Enhancements in `@seasyecn/opencode-openai-residency-enhance`:
 - **Local Config Fallback**: Reads `opencode-openai-residency-local.json` (from `~/.config/opencode/` or `$OPENCODE_RESIDENCY_CONFIG_FILE`), allowing client header and gateway settings when provider options cannot be modified directly.
 - **Custom User-Agent Strings**: Configurable `ua_string` and `claude_ua_string` overrides.
 - **Gateway & Proxy Support**: Configurable `ua_target_fragments` and `baseURL` targets for non-standard endpoints.
@@ -27,11 +28,14 @@ This package is derived from the upstream project:
 
 ## Installation
 
+> **Note**: Public release to npm (`@seasyecn/opencode-openai-residency-enhance`) is pending. Until published, install from local repository or git URL.
+
 Add to your `opencode.json`:
 
 ```jsonc
 {
-  "plugin": ["@seasyecn/opencode-openai-residency-local"]
+  // Once published to npm:
+  "plugin": ["@seasyecn/opencode-openai-residency-enhance"]
 }
 ```
 
@@ -39,7 +43,7 @@ Or for local development:
 
 ```jsonc
 {
-  "plugin": ["file:/path/to/@seasyecn/opencode-openai-residency-local"]
+  "plugin": ["file:/path/to/@seasyecn/opencode-openai-residency-enhance"]
 }
 ```
 
@@ -72,6 +76,8 @@ Specified under `provider.<name>.options`:
 > **IMPORTANT (`enforce_residency` scope)**: `enforce_residency` is read **ONLY** from the active provider options in `opencode.json`. It is **NOT** read from the local JSON config file. If you require regional data residency headers, configure `enforce_residency` under the provider's `options` block.
 
 ### 2. Local Configuration File (`opencode-openai-residency-local.json`)
+
+> **Runtime Compatibility Note**: To preserve complete backward compatibility with existing environments and active installations, the configuration file retains its historical filename `opencode-openai-residency-local.json`. Existing configuration files and active plugin paths remain fully compatible without renaming.
 
 For environments where provider options in `opencode.json` cannot be edited, client headers, gateways, and WebSocket options can be supplied via a local configuration file located at `~/.config/opencode/opencode-openai-residency-local.json` (or pointed to by `OPENCODE_RESIDENCY_CONFIG_FILE`):
 

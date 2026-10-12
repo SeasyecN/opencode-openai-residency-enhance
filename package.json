@@ -1,16 +1,16 @@
 {
-  "name": "@seasyecn/opencode-openai-residency-local",
+  "name": "@seasyecn/opencode-openai-residency-enhance",
   "version": "1.0.0",
   "description": "OpenCode plugin: OpenAI Codex data residency header, UA override, and WebSocket transport with local config fallback",
   "license": "MIT",
   "author": "SeasyecN",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SeasyecN/opencode-openai-residency-local.git"
+    "url": "git+https://github.com/SeasyecN/opencode-openai-residency-enhance.git"
   },
-  "homepage": "https://github.com/SeasyecN/opencode-openai-residency-local#readme",
+  "homepage": "https://github.com/SeasyecN/opencode-openai-residency-enhance#readme",
   "bugs": {
-    "url": "https://github.com/SeasyecN/opencode-openai-residency-local/issues"
+    "url": "https://github.com/SeasyecN/opencode-openai-residency-enhance/issues"
   },
   "type": "module",
   "main": "./dist/index.js",
