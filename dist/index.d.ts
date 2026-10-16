@@ -1,4 +1,3 @@
-import type { Plugin } from "@opencode-ai/plugin";
-export declare const OpenAIResidencyPlugin: Plugin;
+import { Plugin } from "@opencode/plugin";
+export declare const OpenAIResidencyPlugin: Plugin.Plugin;
 export default OpenAIResidencyPlugin;
-//# sourceMappingURL=index.d.ts.map

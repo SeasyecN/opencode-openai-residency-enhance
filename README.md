@@ -1,71 +1,154 @@
 # @seasyecn/opencode-openai-residency-enhance
 
-OpenCode plugin for OpenAI Codex API compatibility tweaks:
+V2 plugin for OpenAI Codex residency headers, client User-Agent/originator overrides,
+gateway targeting, and experimental native WebSocket request customization.
 
-1. **Data Residency** — Attaches `x-openai-internal-codex-residency` for OpenAI Enterprise workspaces with regional data restrictions.
-2. **User-Agent / Client Gate Override** — Overrides `User-Agent` and `originator` headers on outgoing requests to satisfy backend client gates (e.g. `codex_cli_rs` client gate for models such as GPT-5.5 / GPT-5.6).
-3. **WebSocket Transport for WS-Only Models (Experimental)** — Opt-in transport for WebSocket-only Codex models (such as `gpt-5.6-sol`) over Codex WebSocket transport (`wss://`), injecting the required service tier and translating frames to SSE streams.
-4. **Enhanced Configuration & Gateway Support** — Supports external configuration via `opencode-openai-residency-local.json` or environment variable, custom User-Agent strings, custom target URL fragments (for proxies/gateways), and selective request-body model matching.
+## Compatibility and release status
 
----
+Version **2.0.0** targets **OpenCode 2.0.30** and depends on exactly
+`@opencode/plugin@2.0.30`. It does not implement V1's `server()` or `chat.headers`.
+Use the previous package version for V1. Importing this package does not patch
+`fetch`, `WebSocket`, environment variables, or any other plugin.
 
-## Provenance & Attribution
+**Migration limitation / release gate:** V1's plugin-owned, per-model HTTP-to-WS
+bridge is removed. V2 selects native WebSocket transport at the **provider** level;
+there is no public request hook to select it by `ws_models`. This version refuses
+`ws_transport: true` unless the provider explicitly sets
+`settings.transport: "websocket"`. It never enables provider-wide WS on your behalf.
+`ws_models` now selects handshake/payload tweaks, **not transport routing**. If
+selective WS-only routing is essential, do not upgrade until that migration decision
+has been resolved. This behavior difference requires release approval; passing the
+local fixtures does not resolve it.
 
-This package is derived from the upstream project:
-- **Upstream Package**: [`opencode-openai-residency`](https://github.com/DusKing1/opencode-openai-residency)
-- **Original Author**: Hugo Chiang ([@DusKing1](https://github.com/DusKing1))
-- **Original License**: MIT License (Copyright © 2026 Hugo Chiang)
-- **Enhanced Fork Repository**: [SeasyecN/opencode-openai-residency-enhance](https://github.com/SeasyecN/opencode-openai-residency-enhance)
+## Installation after publication
 
-### Enhancements in `@seasyecn/opencode-openai-residency-enhance`:
-- **Local Config Fallback**: Reads `opencode-openai-residency-local.json` (from `~/.config/opencode/` or `$OPENCODE_RESIDENCY_CONFIG_FILE`), allowing client header and gateway settings when provider options cannot be modified directly.
-- **Custom User-Agent Strings**: Configurable `ua_string` and `claude_ua_string` overrides.
-- **Gateway & Proxy Support**: Configurable `ua_target_fragments` and `baseURL` targets for non-standard endpoints.
-- **Body Model Inspection**: `ua_gpt_models` option to inspect request body models and intercept GPT requests across custom providers (e.g. proxy gateways).
-- **Claude Request Rewriting**: Custom handling for Claude model requests with `claude_ua_string` and `beta=true` parameter.
-
----
-
-## Installation
-
-> **Note**: Public release to npm (`@seasyecn/opencode-openai-residency-enhance`) is pending. Until published, install from local repository or git URL.
-
-Add to your `opencode.json`:
+The working tree is a release candidate; these instructions do not assert that
+2.0.0 has been published.
 
 ```jsonc
 {
-  // Once published to npm:
-  "plugin": ["@seasyecn/opencode-openai-residency-enhance"]
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["@seasyecn/opencode-openai-residency-enhance@2.0.0"]
 }
 ```
 
-Or for local development:
-
-```jsonc
-{
-  "plugin": ["file:/path/to/@seasyecn/opencode-openai-residency-enhance"]
-}
-```
-
----
+For development, put the package directory path in `plugins` after building it.
+Do not copy compiled files into OpenCode's package cache. V1's singular `plugin`
+configuration should be migrated to V2's `plugins`; merely wrapping V1 hooks in
+an empty `setup` does not migrate the implementation.
 
 ## Configuration
 
-Configuration settings come from two sources with distinct scopes:
-
-### 1. Provider Options (`opencode.json`)
-
-Specified under `provider.<name>.options`:
+V2 uses `providers.<id>.settings` (V1 used `provider.<id>.options`). The plugin reads
+the active provider through the public V2 context; it does not parse opencode.json
+itself, change its base URL, select models, or replace credentials.
 
 ```jsonc
 {
-  "provider": {
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["@seasyecn/opencode-openai-residency-enhance@2.0.0"],
+  "providers": {
     "openai": {
-      "options": {
-        "enforce_residency": "us",          // Read ONLY from provider options
+      "settings": {
+        "enforce_residency": "us",
         "ua_override": true,
+        "ua_version": "999.999.999"
+      }
+    }
+  }
+}
+```
+
+`enforce_residency` is **provider-only**, never loaded from the fallback JSON file.
+It adds `x-openai-internal-codex-residency` to the selected provider's requests,
+including native WebSocket handshakes. Setting a header does not itself guarantee
+regional processing: the upstream account and service must support it.
+
+### Historical local fallback
+
+The filename remains `opencode-openai-residency-local.json` under
+`$XDG_CONFIG_HOME/opencode/` or `~/.config/opencode/`. Override the path with
+`OPENCODE_RESIDENCY_CONFIG_FILE`. No private configuration is distributed.
+
+```json
+{
+  "ua_override": true,
+  "ua_gpt_models": true,
+  "ua_string": "Codex Desktop/0.142.5 (Ubuntu 22.4.0; x86_64) xterm-256color (Codex Desktop; 26.623.101652)",
+  "claude_ua_string": "claude-cli/2.1.220 (external, sdk-cli)",
+  "ua_target_fragments": ["https://gateway.example.com/v1"]
+}
+```
+
+Provider and local `ua_override` / `ws_transport` switches are ORed: local `false`
+does not disable provider `true`. Nonempty local UA strings/version and nonempty
+`ws_models` override provider values; a local boolean `ua_gpt_models` overrides
+the provider value. URL fragments and `baseURL` targets are additive. Local
+`baseURL` is **only a match target**, never an endpoint override.
+
+Settings are read on each request; changes to existing header values are picked
+up without a timer. Reload the plugin after enabling `ua_override` from off,
+adding providers, or changing transport, because hook registration affects native
+transport selection. Hook/transform registrations belong to the host; cleanup
+invalidates callbacks still in flight. There are no plugin-owned timers or sockets.
+
+### Options
+
+| Option | Source | Default | Behavior |
+| --- | --- | --- | --- |
+| `enforce_residency` | Provider only | unset | Residency header; independent of UA override. |
+| `ua_override` | Both | `false` | Enables UA/originator rewriting on matching requests. |
+| `ua_gpt_models` | Both | `false` | Also matches upstream model names starting with `gpt` (case-insensitive). Native HTTP inspects the JSON body; semantic/WS hooks resolve the model's upstream `modelID`. |
+| `ua_version` | Both | `999.999.999` | Version in the generated Codex UA. |
+| `ua_string` | Both | unset | Full Codex UA override. |
+| `claude_ua_string` | Both | `claude-cli/2.1.220 (external, cli)` | UA for matching `claude-` models; removes `originator`. |
+| `ua_target_fragments` | Both | `[]` | Additional URL substrings; URL values also contribute their host. |
+| `baseURL` | Both | unset | Additional match target; provider baseURL still belongs to OpenCode. |
+| `ws_transport` | Both | `false` | Enables selected native-WS handshake/frame tweaks; requires explicit native transport. **No V1 HTTP-to-WS bridge.** |
+| `ws_models` | Both | `["gpt-5.6-sol"]` | Exact upstream model IDs receiving WS tweaks. Does not select the route. |
+
+Built-in target substrings are `chatgpt.com/backend-api/codex` and `api.openai.com`.
+Configured target matches intentionally retain the historical substring/host
+semantics; use trusted, specific fragments. A global local file is an explicit
+cross-provider opt-in, but provider-specific options and accumulated targets never
+leak from one provider to another. No opt-in means no identity overrides.
+
+Default Codex UA:
+
+```text
+codex_cli_rs/<version> (Windows 10.0.26100; x86_64) WindowsTerminal (codex_cli_rs; <version>)
+```
+
+Matching Codex requests use `originator: codex_cli_rs`. Matching Claude HTTP
+requests instead remove that header and set `beta=true`, preserving other query
+parameters. All other headers, authentication, method, body, model, and endpoint
+are retained.
+
+## HTTP and native WebSocket behavior
+
+`model.request` applies headers for all request kinds: primary, title, generate,
+and compaction. Provider-scoped `http.request` handles final headers, body-model
+matching, and Claude's beta query on HTTP-only providers with UA override enabled.
+No unscoped HTTP hook or global fetch wrapper is installed.
+
+OpenCode forces providers with HTTP hooks onto HTTP. To avoid disabling native
+WS, this plugin does **not** register HTTP hooks for explicitly WS providers, or
+for built-in OpenAI/Azure/xAI defaults unless `transport: "http"` is explicit.
+Those routes use semantic headers plus `experimental.ws.handshake`. Consequently,
+Claude beta-query rewriting and native-body inspection require an HTTP provider;
+they cannot operate on a native-WS provider's HTTP fallback. Model aliases are
+resolved to upstream IDs. Compressed HTTP bodies are not decoded or modified;
+the resolved upstream model ID is used instead of inspecting their raw body.
+
+Example of the explicit, provider-wide transport decision:
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "settings": {
+        "transport": "websocket",
         "ws_transport": true,
-        "ua_version": "999.999.999",
         "ws_models": ["gpt-5.6-sol"]
       }
     }
@@ -73,72 +156,45 @@ Specified under `provider.<name>.options`:
 }
 ```
 
-> **IMPORTANT (`enforce_residency` scope)**: `enforce_residency` is read **ONLY** from the active provider options in `opencode.json`. It is **NOT** read from the local JSON config file. If you require regional data residency headers, configure `enforce_residency` under the provider's `options` block.
+For selected matching models, the handshake adds the Codex UA/originator and
+`openai-beta: responses_websockets=2026-02-06`, independent of `ua_override`.
+Other original handshake headers are retained. Outgoing `response.create` frames
+get `service_tier: "priority"` if absent and reasoning effort from
+`OPENCODE_CODEX_REASONING` (default `medium`) if absent. Existing tier, reasoning
+effort and unrelated fields are preserved. Other frames/models are not rewritten.
+Connection pooling, framing, incoming events, cancellation, reconnection and
+HTTP fallback are owned by OpenCode, not by this plugin. Routes without native WS
+support may fall back to HTTP; this plugin does not make a WS-only model work on
+an unsupported gateway.
 
-### 2. Local Configuration File (`opencode-openai-residency-local.json`)
+## Verification and diagnostics
 
-> **Runtime Compatibility Note**: To preserve complete backward compatibility with existing environments and active installations, the configuration file retains its historical filename `opencode-openai-residency-local.json`. Existing configuration files and active plugin paths remain fully compatible without renaming.
-
-For environments where provider options in `opencode.json` cannot be edited, client headers, gateways, and WebSocket options can be supplied via a local configuration file located at `~/.config/opencode/opencode-openai-residency-local.json` (or pointed to by `OPENCODE_RESIDENCY_CONFIG_FILE`):
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "ua_override": true,
-  "ua_gpt_models": true,
-  "ua_version": "999.999.999",
-  "ua_string": "Codex Desktop/0.142.5 (Ubuntu 22.4.0; x86_64) xterm-256color (Codex Desktop; 26.623.101652)",
-  "claude_ua_string": "claude-cli/2.1.220 (external, sdk-cli)",
-  "ua_target_fragments": [
-    "https://gateway.example.com/v1"
-  ]
-}
+```sh
+bun install
+bun run typecheck
+bun test
+bun run build
+bun pm pack
 ```
 
-> **Supported Local Config Keys**: The local config file supports **ONLY** the implemented User-Agent, gateway, and WebSocket transport settings (`ua_override`, `ua_gpt_models`, `ua_version`, `ua_string`, `claude_ua_string`, `ua_target_fragments`, `baseURL`, `ws_transport`, `ws_models`). Setting `enforce_residency` in this file has no effect.
+Fixtures invoke actual `setup`, capture and execute real registered callbacks,
+and cover scopes, header preservation, aliases, HTTP/WS request kinds, config
+changes and cleanup. They do not call any upstream model or gateway. No live
+network compatibility, regional routing, client gate acceptance, or full OpenCode
+service integration is claimed. Independent QA and an installed-package check
+remain required before release.
 
----
+`OPENCODE_RESIDENCY_DEBUG=1` enables generic diagnostic messages; optionally direct
+them to `OPENCODE_RESIDENCY_DEBUG_FILE`. Diagnostics never include URLs, headers,
+credentials, prompts, bodies, local paths, or raw exception messages.
 
-## Options Reference
+## Provenance and license
 
-| Option | Supported In | Type | Default | Description |
-| --- | --- | --- | --- | --- |
-| `enforce_residency` | Provider options only | `string` | `undefined` | Region code (e.g. `"us"`) attached to `x-openai-internal-codex-residency`. |
-| `ua_override` | Both | `boolean` | `false` | Master switch for User-Agent and originator header override. |
-| `ua_gpt_models` | Both | `boolean` | `false` | When true, inspects request body and applies UA override to requests targeting models starting with `gpt`. |
-| `ua_version` | Both | `string` | `"999.999.999"` | Client version sent in `codex_cli_rs/<version>`. |
-| `ua_string` | Both | `string` | `undefined` | Full custom User-Agent string for Codex requests. |
-| `claude_ua_string` | Both | `string` | `undefined` | Full custom User-Agent string for Claude requests. |
-| `ua_target_fragments` | Both | `string[]` | `[]` | Additional URL substrings/hostnames to match for request interception. |
-| `baseURL` | Both | `string` | `undefined` | Base URL added to target fragments for interception. |
-| `ws_transport` | Both | `boolean` | `false` | Master switch for WebSocket transport (experimental). |
-| `ws_models` | Both | `string[]` | `["gpt-5.6-sol"]` | List of model names to route over WebSocket. |
+Derived from [DusKing1/opencode-openai-residency](https://github.com/DusKing1/opencode-openai-residency),
+by Hugo Chiang ([@DusKing1](https://github.com/DusKing1)), MIT licensed.
+Enhanced fork: [SeasyecN/opencode-openai-residency-enhance](https://github.com/SeasyecN/opencode-openai-residency-enhance).
+The fork adds local fallback configuration, custom UA strings, gateway targets,
+body-model matching, and Claude request handling. V2 replaces the historical
+global fetch patch with scoped hooks.
 
----
-
-## WebSocket Transport Caveats (Experimental)
-
-The `ws_transport` feature is an **experimental fallback transport**:
-- **Test Scope**: Verified under mocked smoke checks with mocked WebSocket servers for frame-to-SSE parsing and payload structuring (`response.create`).
-- **No Live Compatibility Guarantees**: Upstream OpenAI WebSocket protocol details and gateway handshake behaviors may change without notice. Real-world upstream endpoint behavior has not been independently verified.
-- **No Reconnection or Session Recovery**: The transport establishes a single connection per request. There is no automatic retry, exponential backoff, connection pooling, or session resumption. If the socket closes or encounters a network error, the stream terminates immediately.
-- **Cancellation**: Relies on standard `AbortSignal` listeners to close the active socket on client abort.
-
-Use this feature with awareness of these architectural constraints.
-
----
-
-## Debugging
-
-Set environment variables to log intercepted requests:
-
-- `OPENCODE_RESIDENCY_DEBUG=1`: Enables stderr debug logging.
-- `OPENCODE_RESIDENCY_DEBUG_FILE=/path/to/log.txt`: Redirects debug logging to a specified file.
-
----
-
-## License
-
-MIT License. See [LICENSE](./LICENSE) for details.
-Copyright (c) 2026 Hugo Chiang.
-Copyright (c) 2026 SeasyecN.
+MIT; see [LICENSE](./LICENSE). Copyright © 2026 Hugo Chiang and SeasyecN.

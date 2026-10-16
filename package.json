@@ -1,6 +1,6 @@
 {
   "name": "@seasyecn/opencode-openai-residency-enhance",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "OpenCode plugin: OpenAI Codex data residency header, UA override, and WebSocket transport with local config fallback",
   "license": "MIT",
   "author": "SeasyecN",
@@ -22,7 +22,8 @@
     }
   },
   "files": [
-    "dist",
+    "dist/index.js",
+    "dist/index.d.ts",
     "README.md",
     "LICENSE"
   ],
@@ -37,7 +38,16 @@
     "enterprise",
     "plugin"
   ],
-  "peerDependencies": {
-    "@opencode-ai/plugin": ">=1.0.0"
+  "scripts": {
+    "build": "bun build src/index.ts --target=bun --packages=external --outdir=dist && tsc --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.0.30"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
   }
 }
